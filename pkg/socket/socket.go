@@ -22,7 +22,6 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
     log.Debug().Msg("Client has initiated a connection")
 
-    // Handle incoming messages in a separate goroutine
     go func() {
         for {
             _, msg, err := conn.ReadMessage()
@@ -33,7 +32,6 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
             
             log.Debug().Str("message", string(msg)).Msg("Message received")
 
-            // Echo message back to client
             err = conn.WriteMessage(websocket.TextMessage, msg)
             if err != nil {
                 log.Error().Err(err).Msg("Error writing message")
