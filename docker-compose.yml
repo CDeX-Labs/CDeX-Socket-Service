@@ -5,7 +5,9 @@ services:
       context: ../
       dockerfile: docker/dev.Dockerfile
     ports:
-      - "5000:5000"
+      - "6001:6001"
+    expose:
+      - "6001"
     env_file:
       - .env
     volumes:
