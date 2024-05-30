@@ -1,13 +1,17 @@
 version: "3"
 services:
-  socket:
+  enigma-socket:
     build:
-      context: ../
-      dockerfile: ./Dockerfile
+      context: .
+    image: enigma-socket
+    container_name: enigma-socket
+    hostname: enigma-socket
     ports:
       - "6001:6001"
     expose:
       - "6001"
-    volumes:
-      - ../:/app
     restart: unless-stopped
+
+networks:
+  enigma-network:
+    name: enigma-network
