@@ -8,8 +8,6 @@ services:
       - "6001:6001"
     expose:
       - "6001"
-    env_file:
-      - .env
     volumes:
       - ../:/app
     restart: unless-stopped
