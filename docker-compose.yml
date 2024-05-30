@@ -3,7 +3,7 @@ services:
   socket:
     build:
       context: ../
-      dockerfile: docker/dev.Dockerfile
+      dockerfile: ./Dockerfile
     ports:
       - "6001:6001"
     expose:
