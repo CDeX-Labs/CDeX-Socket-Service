@@ -65,6 +65,5 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				delete(connections.clients, client)
 			}
 		}
-		connections.RUnlock()
 	}
 }
