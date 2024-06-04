@@ -9,9 +9,14 @@ import (
 
 var (
 	upgrader = websocket.Upgrader{
+        ReadBufferSize: 1024,
+        WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			log.Print("Request Origin: ", r.Host)
-			return true
+			if r.Host != "ws.enigma.fm" {
+                return false
+            } else {
+                return true
+            }
 		},
 	}
 	connections = struct {
