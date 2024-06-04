@@ -7,39 +7,55 @@ import (
 	"sync"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
-var clients = make(map[*websocket.Conn]bool)
-var clientsLock = sync.RWMutex{}
+var (
+	upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			log.Print("Request Origin: ", r.Host)
+			return true
+		},
+	}
+	connections = struct {
+		sync.RWMutex
+		clients map[*websocket.Conn]struct{}
+	}{clients: make(map[*websocket.Conn]struct{})}
+)
 
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade failed: ", err)
+		log.Print("Error during connection upgradation: ", err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		conn.Close()
+		connections.Lock()
+		delete(connections.clients, conn)
+		connections.Unlock()
+	}()
 
-    // Echo incoming messages to all clients
-    for {
-        messageType, p, err := conn.ReadMessage()
-        if err != nil {
-            log.Debug().Msg("Error reading message")
-            return
-        }
-        clientsLock.RLock()
-        for client := range clients {
-            if client != conn {
-                if err := client.WriteMessage(messageType, p); err != nil {
-                    log.Debug().Msg("Error writing message")
-                    return
-                }
-            }
-        }
-        clientsLock.RUnlock()
-    }
+	connections.Lock()
+	connections.clients[conn] = struct{}{}
+	connections.Unlock()
+
+	// Echo incoming messages to all clients
+	for {
+		messageType, message, err := conn.ReadMessage()
+		if err != nil {
+			log.Err(err).Msg("Error during message reading")
+			break
+		}
+		log.Debug().Msgf("Received message: %s", message)
+
+		// Broadcast message to all clients
+		connections.RLock()
+		for client := range connections.clients {
+			err := client.WriteMessage(messageType, message)
+			if err != nil {
+				log.Err(err).Msg("Error during message writing")
+				client.Close()
+				delete(connections.clients, client)
+			}
+		}
+		connections.RUnlock()
+	}
 }
