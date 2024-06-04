@@ -46,7 +46,11 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	for {
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Err(err).Msg("Error during message reading")
+            log.Err(err).Msg("Error during message reading")
+
+            if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Err(err).Msg("Common error during message reading")
+			}
 			break
 		}
 		log.Debug().Msgf("Received message: %s", message)
