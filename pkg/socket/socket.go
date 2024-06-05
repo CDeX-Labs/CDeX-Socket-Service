@@ -5,18 +5,19 @@ import (
 	"github.com/rs/zerolog/log"
 	"net/http"
 	"sync"
+	"time"
 )
 
 var (
 	upgrader = websocket.Upgrader{
-        ReadBufferSize: 1024,
-        WriteBufferSize: 1024,
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
 			if r.Host != "ws.enigma.fm" {
-                return false
-            } else {
-                return true
-            }
+				return false
+			} else {
+				return true
+			}
 		},
 	}
 	connections = struct {
@@ -28,11 +29,10 @@ var (
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("Error during connection upgradation: ", err)
+		log.Error().Err(err).Msg("Error during connection upgradation")
 		return
 	}
 	defer func() {
-		conn.Close()
 		connections.Lock()
 		delete(connections.clients, conn)
 		connections.Unlock()
@@ -42,14 +42,29 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	connections.clients[conn] = struct{}{}
 	connections.Unlock()
 
-	// Echo incoming messages to all clients
+	// Periodic ping to keep connection alive
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					log.Error().Err(err).Msg("Error sending ping")
+					return
+				}
+			}
+		}
+	}()
+
+	// Handle incoming messages
 	for {
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
-            log.Err(err).Msg("Error during message reading")
-
-            if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Err(err).Msg("Common error during message reading")
+			log.Error().Err(err).Msg("Error during message reading")
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				return
 			}
 			break
 		}
@@ -60,10 +75,11 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		for client := range connections.clients {
 			err := client.WriteMessage(messageType, message)
 			if err != nil {
-				log.Err(err).Msg("Error during message writing")
+				log.Error().Err(err).Msg("Error during message writing")
 				client.Close()
 				delete(connections.clients, client)
 			}
 		}
+		connections.RUnlock()
 	}
 }
