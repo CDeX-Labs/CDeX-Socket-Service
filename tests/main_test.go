@@ -5,24 +5,39 @@ import (
     "net/http/httptest"
     "testing"
     "github.com/rs/zerolog"
-	"Enigma-Socket-Service/pkg/socket"
+    "Enigma-Socket-Service/pkg/socket"
 )
 
 func TestMain(t *testing.T) {
-	// Unit test for main function
     zerolog.SetGlobalLevel(zerolog.Disabled)
 
-    req, err := http.NewRequest("GET", "/alerts", nil)
+    // Test case with a valid API key
+    validAPIKey := "eofqjvwilceiecjwqludjtshrcnfcduo"
+    reqValid, err := http.NewRequest("GET", "/ws/v1?apiKey="+validAPIKey, nil)
     if err != nil {
         t.Fatal(err)
     }
 
-    rr := httptest.NewRecorder()
+    rrValid := httptest.NewRecorder()
+    socket.HandleWebSocket(rrValid, reqValid)
 
-    socket.HandleWebSocket(rr, req)
-
-    if status := rr.Code; status != http.StatusBadRequest {
+    if status := rrValid.Code; status != http.StatusBadRequest {
         t.Errorf("handler returned wrong status code: got %v want %v",
             status, http.StatusBadRequest)
+    }
+
+    // Test case with an invalid API key
+    invalidAPIKey := "INVALID_API_KEY"
+    reqInvalid, err := http.NewRequest("GET", "/ws/v1?apiKey="+invalidAPIKey, nil)
+    if err != nil {
+        t.Fatal(err)
+    }
+
+    rrInvalid := httptest.NewRecorder()
+    socket.HandleWebSocket(rrInvalid, reqInvalid)
+
+    if status := rrInvalid.Code; status != http.StatusUnauthorized {
+        t.Errorf("handler returned wrong status code: got %v want %v",
+            status, http.StatusUnauthorized)
     }
 }
