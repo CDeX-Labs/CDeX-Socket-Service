@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+var apiKeys = []string{
+	"choco",
+	"arsh"
+}
+
 var (
 	upgrader = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -26,7 +31,22 @@ var (
 	}{clients: make(map[*websocket.Conn]struct{})}
 )
 
+func isValidAPIKey(key string) bool {
+	for _, validKey := range apiKeys {
+		if key == validKey {
+			return true
+		}
+	}
+	return false
+}
+
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.URL.Query().Get("apiKey")
+	if !isValidAPIKey(apiKey) {
+		http.Error(w, "Invalid API Key", http.StatusUnauthorized)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error().Err(err).Msg("Error during connection upgradation")

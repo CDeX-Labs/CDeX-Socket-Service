@@ -1,10 +1,8 @@
 package main
 
 import (
-    //"fmt"
     "net/http"
     "Enigma-Socket-Service/pkg/socket"
-    //"Enigma-Socket-Service/config"
     "github.com/rs/zerolog/log"
 )
 
