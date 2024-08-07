@@ -1,16 +1,33 @@
 package socket
 
 import (
+	"fmt"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
-var apiKeys = []string{
-	"choco",
-	"arsh"
+type APIKeyDetails struct {
+	APIKey     string
+	Username   string
+	CreatedAt  string
+}
+
+var validAPIKeys = []APIKeyDetails{
+	{
+		APIKey:    "eofqjvwilceiecjwqludjtshrcnfcduo",
+		Username:  "enigma",
+		CreatedAt: "2024-08-07T17:20:31.087Z",
+	},
+	{
+		APIKey:    "lursymyslygmjrmvuvzieekakkogjo",
+		Username:  "martin",
+		CreatedAt: "2024-08-07T17:20:42.236Z",
+	},
 }
 
 var (
@@ -32,18 +49,46 @@ var (
 )
 
 func isValidAPIKey(key string) bool {
-	for _, validKey := range apiKeys {
-		if key == validKey {
+	for _, apiKeyDetails := range validAPIKeys {
+		if key == apiKeyDetails.APIKey {
 			return true
 		}
 	}
 	return false
 }
 
+func getLogFilePath(apiKey string) string {
+	return filepath.Join("logs", fmt.Sprintf("%s.log", apiKey))
+}
+
+func createLogsDir() error {
+	return os.MkdirAll("logs", os.ModePerm)
+}
+
+func logMessage(apiKey, messageType, message string) error {
+	filePath := getLogFilePath(apiKey)
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	logEntry := fmt.Sprintf("%s (%s): %s\n", messageType, time.Now().Format(time.RFC3339), message)
+	_, err = file.WriteString(logEntry)
+	return err
+}
+
 func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.URL.Query().Get("apiKey")
 	if !isValidAPIKey(apiKey) {
 		http.Error(w, "Invalid API Key", http.StatusUnauthorized)
+		return
+	}
+
+	err := createLogsDir()
+	if err != nil {
+		log.Error().Err(err).Msg("Error creating logs directory")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
@@ -90,6 +135,12 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Debug().Msgf("Received message: %s", message)
 
+		// Log received message
+		err = logMessage(apiKey, "RECEIVED", string(message))
+		if err != nil {
+			log.Error().Err(err).Msg("Error logging received message")
+		}
+
 		// Broadcast message to all clients
 		connections.RLock()
 		for client := range connections.clients {
@@ -98,6 +149,12 @@ func HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 				log.Error().Err(err).Msg("Error during message writing")
 				client.Close()
 				delete(connections.clients, client)
+			} else {
+				// Log sent message
+				err = logMessage(apiKey, "SENT", string(message))
+				if err != nil {
+					log.Error().Err(err).Msg("Error logging sent message")
+				}
 			}
 		}
 		connections.RUnlock()
