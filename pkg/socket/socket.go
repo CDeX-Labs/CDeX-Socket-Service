@@ -35,11 +35,11 @@ var (
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin: func(r *http.Request) bool {
-			if r.Host != "ws.enigma.fm" {
+			/*if r.Host != "ws.enigma.fm" {
 				return false
-			} else {
+			} else {*/
 				return true
-			}
+			//}
 		},
 	}
 	connections = struct {
