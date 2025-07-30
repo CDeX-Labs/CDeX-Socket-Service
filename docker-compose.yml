@@ -11,7 +11,9 @@ services:
     expose:
       - "6001"
     restart: unless-stopped
+    networks:
+      - enigma-network
 
 networks:
   enigma-network:
-    name: enigma-network
+    external: true
