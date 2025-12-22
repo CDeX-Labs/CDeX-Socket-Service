@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CDeX WebSocket Test Client</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #1a1a2e; color: #eee; }
+        h1 { color: #00d9ff; }
+        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .panel { background: #16213e; padding: 20px; border-radius: 10px; }
+        h3 { color: #00d9ff; margin-top: 0; }
+        input, button, textarea, select { width: 100%; padding: 10px; margin: 5px 0; border: none; border-radius: 5px; }
+        input, textarea, select { background: #0f3460; color: #eee; }
+        button { background: #00d9ff; color: #1a1a2e; cursor: pointer; font-weight: bold; }
+        button:hover { background: #00b4d8; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .btn-disconnect { background: #e94560; }
+        .btn-disconnect:hover { background: #c73e54; }
+        #messages { height: 400px; overflow-y: auto; background: #0f3460; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; }
+        .msg { padding: 5px; margin: 2px 0; border-radius: 3px; }
+        .msg-sent { background: #1a4a1a; }
+        .msg-received { background: #1a1a4a; }
+        .msg-error { background: #4a1a1a; }
+        .msg-system { background: #3a3a1a; color: #ffcc00; }
+        .status { padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+        .status-connected { background: #1a4a1a; }
+        .status-disconnected { background: #4a1a1a; }
+        .quick-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .quick-actions button { width: auto; padding: 8px 15px; }
+    </style>
+</head>
+<body>
+    <h1>CDeX WebSocket Test Client</h1>
+
+    <div class="container">
+        <div class="panel">
+            <h3>Connection</h3>
+            <div id="status" class="status status-disconnected">Disconnected</div>
+
+            <label>WebSocket URL:</label>
+            <input type="text" id="wsUrl" value="ws://localhost:6001/ws">
+
+            <label>JWT Token:</label>
+            <textarea id="jwtToken" rows="3" placeholder="Paste your JWT token here"></textarea>
+
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" class="btn-disconnect" onclick="disconnect()" disabled>Disconnect</button>
+
+            <h3 style="margin-top: 20px;">Quick Actions</h3>
+            <div class="quick-actions">
+                <button onclick="sendPing()">Ping</button>
+                <button onclick="joinRoom('global')">Join Global</button>
+                <button onclick="leaveRoom('global')">Leave Global</button>
+            </div>
+
+            <h3 style="margin-top: 20px;">Join Room</h3>
+            <select id="roomType">
+                <option value="global">Global</option>
+                <option value="contest">Contest</option>
+                <option value="problem">Problem</option>
+            </select>
+            <input type="text" id="roomId" placeholder="Room ID (e.g., contest:abc123)">
+            <button onclick="joinRoomCustom()">Join Room</button>
+            <button onclick="leaveRoomCustom()">Leave Room</button>
+
+            <h3 style="margin-top: 20px;">Custom Message</h3>
+            <textarea id="customMsg" rows="4" placeholder='{"type":"PING"}'></textarea>
+            <button onclick="sendCustom()">Send Custom</button>
+        </div>
+
+        <div class="panel">
+            <h3>Messages <button onclick="clearMessages()" style="width:auto;padding:5px 10px;float:right;font-size:12px;">Clear</button></h3>
+            <div id="messages"></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let requestId = 0;
+
+        function log(message, type = 'system') {
+            const div = document.getElementById('messages');
+            const msg = document.createElement('div');
+            msg.className = `msg msg-${type}`;
+            const time = new Date().toLocaleTimeString();
+
+            if (typeof message === 'object') {
+                msg.textContent = `[${time}] ${JSON.stringify(message, null, 2)}`;
+            } else {
+                msg.textContent = `[${time}] ${message}`;
+            }
+
+            div.appendChild(msg);
+            div.scrollTop = div.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            const status = document.getElementById('status');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+
+            if (connected) {
+                status.textContent = 'Connected';
+                status.className = 'status status-connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                status.textContent = 'Disconnected';
+                status.className = 'status status-disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        function connect() {
+            const url = document.getElementById('wsUrl').value;
+            const token = document.getElementById('jwtToken').value.trim();
+
+            if (!token) {
+                log('Please enter a JWT token', 'error');
+                return;
+            }
+
+            const fullUrl = `${url}?token=${encodeURIComponent(token)}`;
+            log(`Connecting to ${url}...`);
+
+            try {
+                ws = new WebSocket(fullUrl);
+
+                ws.onopen = () => {
+                    log('Connected!', 'system');
+                    updateStatus(true);
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        log(data, 'received');
+                    } catch {
+                        log(event.data, 'received');
+                    }
+                };
+
+                ws.onclose = (event) => {
+                    log(`Disconnected: ${event.code} ${event.reason}`, 'system');
+                    updateStatus(false);
+                    ws = null;
+                };
+
+                ws.onerror = (error) => {
+                    log('WebSocket error', 'error');
+                    console.error(error);
+                };
+            } catch (error) {
+                log(`Connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function send(msg) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('Not connected', 'error');
+                return;
+            }
+
+            const message = {
+                ...msg,
+                timestamp: Date.now(),
+                requestId: `req-${++requestId}`
+            };
+
+            ws.send(JSON.stringify(message));
+            log(message, 'sent');
+        }
+
+        function sendPing() {
+            send({ type: 'PING' });
+        }
+
+        function joinRoom(roomId) {
+            send({
+                type: 'JOIN_ROOM',
+                payload: { roomId }
+            });
+        }
+
+        function leaveRoom(roomId) {
+            send({
+                type: 'LEAVE_ROOM',
+                payload: { roomId }
+            });
+        }
+
+        function joinRoomCustom() {
+            const type = document.getElementById('roomType').value;
+            let roomId = document.getElementById('roomId').value.trim();
+
+            if (type === 'global') {
+                roomId = 'global';
+            } else if (!roomId) {
+                log('Please enter a room ID', 'error');
+                return;
+            } else if (!roomId.includes(':')) {
+                roomId = `${type}:${roomId}`;
+            }
+
+            joinRoom(roomId);
+        }
+
+        function leaveRoomCustom() {
+            const type = document.getElementById('roomType').value;
+            let roomId = document.getElementById('roomId').value.trim();
+
+            if (type === 'global') {
+                roomId = 'global';
+            } else if (!roomId) {
+                log('Please enter a room ID', 'error');
+                return;
+            } else if (!roomId.includes(':')) {
+                roomId = `${type}:${roomId}`;
+            }
+
+            leaveRoom(roomId);
+        }
+
+        function sendCustom() {
+            const text = document.getElementById('customMsg').value.trim();
+            try {
+                const msg = JSON.parse(text);
+                send(msg);
+            } catch {
+                log('Invalid JSON', 'error');
+            }
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Sample JWT for quick testing (you'll need to generate a real one)
+        document.getElementById('customMsg').value = JSON.stringify({ type: 'PING' }, null, 2);
+    </script>
+</body>
+</html>
