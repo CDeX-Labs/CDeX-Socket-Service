@@ -70,8 +70,13 @@ func Load() *Config {
 				"submission.created",
 				"submission.judged",
 				"leaderboard.updated",
+				"leaderboard.frozen",
+				"leaderboard.unfrozen",
+				"contest.created",
 				"contest.started",
 				"contest.ended",
+				"contest.participant.registered",
+				"proctoring.violation",
 			},
 		},
 		Metrics: MetricsConfig{
